@@ -7,4 +7,5 @@ build/
 data/
 *.log
 .venv/
-local/
+local/log/
+reports/

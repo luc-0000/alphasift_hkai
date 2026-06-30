@@ -1,0 +1,17 @@
+# HK.AI throwaway — remove after 2026-08-01
+#
+# Minimal deps for hk_ai competition entry point (main.py + hkai_*.py).
+# The full alphasift package (akshare/tushare/yfinance) is intentionally NOT
+# installed — too heavy, not needed for HK pod, and most factors are replaced
+# by hk_ai MCP calls.
+#
+# Platform-injected env vars (hk_ai_agent category):
+#   HKAI_MCP_TOKEN, OPENAI_BASE_URL, OPENAI_API_KEY, LLM_MODEL, LLM_API_PARAMS,
+#   OSS_POD_AK_ID, OSS_POD_AK_SECRET, OSS_POD_BUCKET, OSS_POD_ENDPOINT,
+#   AGENT_ID, RUN_ID
+
+python-dotenv>=1.0.0
+openai>=1.0.0
+requests>=2.28.0
+pyyaml>=6.0
+pandas>=2.0.0

@@ -1,0 +1,36 @@
+# HK breakout — price above all MAs + RSI mid-zone + not yet extended
+# Note: hk_ai MCP kline has no volume field, so vol_ratio is not used.
+name: hk_breakout
+display_name: 港股突破
+description: |
+  候选池里挑价格站上 MA5/MA10/MA20 三条均线 + RSI 50-65 + 近 5 日没有爆涨的标的。
+  这种组合代表盘整后蓄势、尚未启动突破。需要 LLM 进一步判断是否有催化。
+category: trend
+version: "1.1"
+
+hard_filters:
+  above_ma5: true
+  above_ma10: true
+  above_ma20: true
+  rsi_14_min: 45
+  rsi_14_max: 70
+  pct_change_5d_min: -2
+  pct_change_5d_max: 8
+
+factor_weights:
+  above_ma20: 0.30
+  above_ma10: 0.20
+  above_ma5: 0.15
+  rsi_14: 0.20
+  dist_to_ma20_pct: 0.15
+
+default_priority: 25
+market_regimes: [trending_up, breakout]
+
+instructions: |
+  **港股突破前蓄势筛选**：候选池里站上三条均线 + RSI 中位区（45-70）+ 近 5 日没爆涨的标的。
+  这种状态通常代表盘整蓄势、等待催化。LLM 排序时优先考虑：
+  - 是否有近期利好消息
+  - 板块整体是否在轮动
+  - 历史突破成功率
+  注：hk_ai MCP 不返回 volume，无法用缩量整理过滤。

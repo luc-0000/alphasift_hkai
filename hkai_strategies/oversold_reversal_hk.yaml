@@ -1,0 +1,29 @@
+# HK oversold reversal — RSI<35 + near MA20 support
+# Note: hk_ai MCP kline has no volume field, so vol_ratio is not used.
+name: hk_oversold_reversal
+display_name: 港股超跌反弹
+description: |
+  港股候选池里挑 RSI<35 + 价格回踩 MA20 附近的标的（-8% ~ +5%）。
+  抓超跌反弹，回避已经跌破 MA20 太深的（趋势可能已破）。
+category: reversal
+version: "1.1"
+
+hard_filters:
+  rsi_14_max: 35
+  dist_to_ma20_pct_min: -8
+  dist_to_ma20_pct_max: 5
+
+factor_weights:
+  rsi_14: 0.45
+  dist_to_ma20_pct: 0.30
+  pct_change_5d: 0.15
+  pct_change_20d: 0.10
+
+default_priority: 30
+market_regimes: [range_bound, oversold]
+
+instructions: |
+  **港股超跌反弹筛选**：候选池里 RSI<35、价格回到 MA20 附近的标的。
+  这种组合通常代表短期卖压释放、有反弹潜力。
+  回避已经跌破 MA20 超过 8% 的（趋势可能已破）。
+  注：hk_ai MCP 不返回 volume，无法用放量确认反弹。

@@ -1,0 +1,32 @@
+# HK momentum quality — 20-day uptrend + healthy price action
+# Note: hk_ai MCP kline has no volume field, so vol_ratio is not used.
+name: hk_momentum_quality
+display_name: 港股动量优质
+description: |
+  港股候选池里挑近 20 日涨幅为正、RSI 未超买（<70）、站上 MA20、未严重偏离 MA20 的标的。
+  适合趋势延续场景；回避 RSI>70 的超买和偏离 MA20 >15% 的追高。
+category: trend
+version: "1.1"
+
+hard_filters:
+  above_ma20: true
+  rsi_14_max: 70
+  rsi_14_min: 40
+  pct_change_20d_min: 0
+  dist_to_ma20_pct_max: 15
+
+factor_weights:
+  momentum_20d: 0.35
+  pct_change_5d: 0.20
+  above_ma20: 0.15
+  above_ma10: 0.10
+  dist_to_ma20_pct: 0.10
+  rsi_14: 0.10
+
+default_priority: 20
+market_regimes: [trending_up]
+
+instructions: |
+  **港股动量优质筛选**：从候选池里挑出近 20 日趋势向上、RSI 在 40-70 区间、
+  未严重偏离 MA20 的标的。回避 RSI>70 的超买和偏离 MA20 >15% 的追高。
+  注：hk_ai MCP 不返回 volume，量能因素不可用。
