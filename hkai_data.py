@@ -13,6 +13,7 @@ import logging
 from typing import Any
 
 from skills.hk_ai.trading_api import (
+    get_buy_list,
     get_quote_by_symbols,
     get_stock_kline,
     list_selectable_stocks,
@@ -192,6 +193,40 @@ def fetch_current_price(stock_code: str) -> float:
         first = raw[0] if isinstance(raw[0], dict) else {}
         return _extract_price(first)
     return 0.0
+
+
+def fetch_buy_prices(limit: int = 50) -> dict[str, float]:
+    """Latest buy price per stock_code from get_buy_list.
+
+    Replaces missing avg_price in get_positions (hk.ai MCP doesn't return
+    cost basis). Returns {stock_code: most_recent_buy_price}.
+    """
+    resp = get_buy_list(page=1, limit=limit)
+    if not isinstance(resp, dict) or not resp.get("success"):
+        return {}
+    data = resp.get("data", {})
+    if isinstance(data, dict):
+        inner = data.get("data", data)
+    else:
+        inner = data
+    # buy_list shape: {list: [...], total, page, limit}
+    items = (
+        inner.get("list") if isinstance(inner, dict) else None
+    ) or (inner if isinstance(inner, list) else [])
+    if not isinstance(items, list):
+        return {}
+    out: dict[str, float] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        code = item.get("stock_code") or item.get("code") or ""
+        if not code:
+            continue
+        price = _f(item, ["buy_price", "price", "deal_price"])
+        if price > 0:
+            # keep the most recent (first occurrence; buy_list is desc by time)
+            out.setdefault(str(code), price)
+    return out
 
 
 # ---------------------------------------------------------------------------

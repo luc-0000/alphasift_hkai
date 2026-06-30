@@ -354,30 +354,105 @@ def plan_buys(
     return orders
 
 
-def plan_exits(holdings: list[dict], stop_loss_pct: float = 0.08) -> list[dict]:
-    """Sell existing positions where current price has fallen > stop_loss_pct
-    below average cost. Simplified — no take-profit logic."""
-    from hkai_data import fetch_current_price
+def plan_exits(
+    holdings: list[dict],
+    stop_loss_pct: float = 0.08,
+    *,
+    free_cash_target: float = 0.0,
+    confidence_mult: float = 1.0,
+) -> list[dict]:
+    """Decide what to sell.
 
-    sells = []
+    Two triggers:
+    1. **Hard stop-loss**: current price < (1 - stop_loss_pct) × cost basis → sell all
+    2. **Capital reallocation** (when free_cash_target > 0): if available cash is
+       too low to deploy new picks, sell the worst performers down to free up
+       budget. Triggered only when T+N hit_rate is poor (confidence_mult < 1.0)
+       and there are clear losers to prune.
+
+    Cost basis lookup order:
+    1. holdings[].avg_price (hk.ai doesn't provide this — always 0)
+    2. Most recent buy price from get_buy_list (fallback)
+    """
+    from hkai_data import fetch_buy_prices, fetch_current_price
+
+    if not holdings:
+        return []
+
+    # Build cost basis map: code → (avg_price, source)
+    buy_prices = fetch_buy_prices(limit=100)
+    cost_map: dict[str, tuple[float, str]] = {}
     for h in holdings:
         code = h.get("code")
-        avg = h.get("avg_price") or 0
+        if not code:
+            continue
+        own_avg = h.get("avg_price") or 0
+        if own_avg > 0:
+            cost_map[code] = (own_avg, "positions_field")
+        elif code in buy_prices:
+            cost_map[code] = (buy_prices[code], "buy_list")
+        else:
+            cost_map[code] = (0.0, "unknown")
+
+    candidates: list[dict] = []
+    for h in holdings:
+        code = h.get("code")
         qty = h.get("quantity") or 0
-        if not code or not avg or qty < MIN_UNIT:
+        if not code or qty < MIN_UNIT:
             continue
+        avg, source = cost_map.get(code, (0.0, "unknown"))
         cur = fetch_current_price(code)
-        if cur <= 0:
+        if cur <= 0 or avg <= 0:
+            # Cannot evaluate — skip (don't sell blindly)
             continue
-        change = (cur - avg) / avg
-        if change < -stop_loss_pct:
-            sell_qty = (int(qty) // MIN_UNIT) * MIN_UNIT
+        change_pct = (cur - avg) / avg * 100
+        candidates.append({
+            "code": code,
+            "quantity": qty,
+            "avg_price": avg,
+            "current_price": cur,
+            "loss_pct": change_pct,
+            "cost_source": source,
+        })
+
+    sells: list[dict] = []
+
+    # Trigger 1: hard stop-loss
+    for c in candidates:
+        if c["loss_pct"] < -stop_loss_pct * 100:
+            sell_qty = (int(c["quantity"]) // MIN_UNIT) * MIN_UNIT
             if sell_qty >= MIN_UNIT:
-                sells.append({
-                    "code": code,
-                    "quantity": sell_qty,
-                    "avg_price": avg,
-                    "current_price": cur,
-                    "loss_pct": change * 100,
-                })
+                sells.append({**c, "quantity": sell_qty, "trigger": "stop_loss"})
+                print(
+                    f"[Exit] STOP-LOSS {c['code']} loss={c['loss_pct']:+.2f}% "
+                    f"(avg HK$ {c['avg_price']:.2f} via {source} → now HK$ {c['current_price']:.2f})"
+                )
+
+    # Trigger 2: capital reallocation (only if confidence_mult < 1.0 and budget short)
+    if free_cash_target > 0 and confidence_mult < 1.0:
+        cash_needed = free_cash_target
+        raised = 0.0
+        # Sort by worst performer first, skip anything already in stop-loss
+        already_selling = {s["code"] for s in sells}
+        ranked = sorted(
+            [c for c in candidates if c["code"] not in already_selling],
+            key=lambda x: x["loss_pct"],
+        )
+        for c in ranked:
+            if raised >= cash_needed:
+                break
+            # Only sell losers (don't sell winners to fund new buys)
+            if c["loss_pct"] >= 0:
+                continue
+            sell_qty = (int(c["quantity"]) // MIN_UNIT) * MIN_UNIT
+            if sell_qty < MIN_UNIT:
+                continue
+            proceeds = sell_qty * c["current_price"]
+            sells.append({**c, "quantity": sell_qty, "trigger": "reallocate"})
+            raised += proceeds
+            print(
+                f"[Exit] REALLOCATE {c['code']} loss={c['loss_pct']:+.2f}% "
+                f"→ free ~HK$ {proceeds:,.2f} for new picks"
+            )
+
     return sells

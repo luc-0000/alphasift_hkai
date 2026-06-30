@@ -41,6 +41,7 @@ from hkai_data import (  # noqa: E402
     fetch_kline,
 )
 from hkai_engine import (  # noqa: E402
+    DEFAULT_ORDER_CAP,
     DEFAULT_TOP_N,
     KLINE_LOOKBACK_DAYS,
     evaluate_history,
@@ -140,9 +141,42 @@ async def main():
     available = fetch_account_cash()
     print(f"[Cash] available: HK$ {available:,.2f}")
 
+    # Compute desired total spend: cap-per-order × N picks, scaled by confidence
+    n_picks = max(len(final_picks), 1)
+    desired_spend = min(available * 0.9, DEFAULT_ORDER_CAP * n_picks) * eval_result.confidence_mult
+    shortfall = max(0.0, desired_spend - available)
+    print(
+        f"[Budget] desired=HK$ {desired_spend:,.2f} "
+        f"(confidence×{eval_result.confidence_mult} × cap HK$ {DEFAULT_ORDER_CAP:,} × {n_picks} picks, "
+        f"capped at cash×0.9), shortfall=HK$ {shortfall:,.2f}"
+    )
+
+    # Plan exits FIRST so we can redeploy freed cash into new picks
+    holdings = fetch_holdings()
+    print(f"[Holdings] {len(holdings)} open positions")
+    sell_orders = plan_exits(
+        holdings,
+        stop_loss_pct=0.08,
+        free_cash_target=shortfall,
+        confidence_mult=eval_result.confidence_mult,
+    )
+    for o in sell_orders:
+        trigger = o.get("trigger", "?")
+        print(
+            f"[Sell:{trigger}] {o['code']} x {o['quantity']} "
+            f"(avg HK$ {o['avg_price']:,.2f} via {o.get('cost_source', '?')} → "
+            f"now HK$ {o['current_price']:,.2f}, {o['loss_pct']:+.2f}%)"
+        )
+
+    # Proceeds from sells (assume instant settlement in competition sim)
+    sell_proceeds = sum(s["quantity"] * s["current_price"] for s in sell_orders)
+    effective_cash = available + sell_proceeds
+    if sell_proceeds > 0:
+        print(f"[Cash] after sells: HK$ {effective_cash:,.2f} (+HK$ {sell_proceeds:,.2f})")
+
     buy_orders = plan_buys(
         final_picks,
-        available_cash=available,
+        available_cash=effective_cash,
         confidence_mult=eval_result.confidence_mult,
         top_n=DEFAULT_TOP_N,
     )
@@ -150,14 +184,6 @@ async def main():
         print(
             f"[Buy] {o['code']} ({o.get('name', '')}) x {o['quantity']} "
             f"@ HK$ {o['price']:,.2f} ≈ HK$ {o['order_amount']:,.2f} — {o.get('reason', '')[:80]}"
-        )
-
-    holdings = fetch_holdings()
-    sell_orders = plan_exits(holdings, stop_loss_pct=0.08)
-    for o in sell_orders:
-        print(
-            f"[Sell] {o['code']} x {o['quantity']} (avg HK$ {o['avg_price']:,.2f} → "
-            f"now HK$ {o['current_price']:,.2f}, {o['loss_pct']:+.2f}%)"
         )
 
     # ----- Phase 6: Execute -----
