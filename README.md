@@ -96,3 +96,7 @@ python main.py
 ## Throwaway
 
 HK.AI competition code — remove after 2026-08-01.
+
+## 出处
+
+本项目 fork 自 [ZhuLinsen/alphasift](https://github.com/ZhuLinsen/alphasift)，原项目采用 Apache-2.0 协议。
